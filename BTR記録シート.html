@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>BTRメソッド トレーニング記録</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-light: #f6f8fa;
+      --text-light: #111;
+      --bg-dark: #1e1e1e;
+      --text-dark: #eee;
+      --accent: #1976d2;
+    }
+
+    body {
+      font-family: sans-serif;
+      background: var(--bg-light);
+      color: var(--text-light);
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1rem;
+      transition: background 0.3s, color 0.3s;
+    }
+    body.dark {
+      background: var(--bg-dark);
+      color: var(--text-dark);
+    }
+
+    h1, h2 { text-align: center; }
+
+    .form-section {
+      background: rgba(255,255,255,0.9);
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 10px;
+    }
+    body.dark .form-section {
+      background: #2a2a2a;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 0.25rem;
+    }
+    button:hover { opacity: 0.85; }
+
+    select {
+      padding: 0.5rem;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      width: 100%;
+    }
+
+    canvas {
+      max-width: 100%;
+      margin-top: 1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 6px;
+      border: 1px solid #ccc;
+      text-align: center;
+    }
+    th {
+      background: #e0e0e0;
+    }
+    body.dark th {
+      background: #333;
+    }
+
+    .dark-toggle {
+      float: right;
+      background: none;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+    .dark-toggle:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 BTRメソッド トレーニング記録</h1>
+  <button class="dark-toggle" id="toggleTheme">🌙 ダークモード</button>
+
+  <!-- ===== 入力フォーム ===== -->
+  <section class="form-section">
+    <h2>記録入力フォーム</h2>
+    <form id="recordForm">
+      <h3>👁 目を鍛えるトレーニング</h3>
+      <div class="grid">
+        <label>たてサッケイド<input type="number" name="tate"></label>
+        <label>よこサッケイド<input type="number" name="yoko"></label>
+        <label>ヘルマンシート<input type="number" name="herman"></label>
+        <label>広視野①<input type="number" name="block1"></label>
+        <label>広視野②<input type="number" name="block2"></label>
+        <label>漢数字一行<input type="number" name="kanji"></label>
+        <label>よこ一行ユニット<input type="number" name="yokounit"></label>
+      </div>
+
+      <h3>🧠 脳を磨くトレーニング</h3>
+      <div class="grid">
+        <label>数字ランダムチェック<input type="number" name="numcheck"></label>
+        <label>ロジカルテスト<input type="number" name="logical"></label>
+        <label>イメージ記憶<input type="number" name="imgmemory"></label>
+        <label>イメージ読み<input type="number" name="imgread"></label>
+      </div>
+      <button type="submit">記録する</button>
+    </form>
+  </section>
+
+  <!-- ===== 表示設定 ===== -->
+  <section>
+    <h2>📈 表示設定</h2>
+    <select id="itemSelect"></select>
+    <button class="filter-btn" data-range="daily">日別</button>
+    <button class="filter-btn" data-range="weekly">週別</button>
+    <button class="filter-btn" data-range="monthly">月別</button>
+  </section>
+
+  <!-- ===== グラフ ===== -->
+  <section>
+    <canvas id="mainChart"></canvas>
+  </section>
+
+  <!-- ===== ログテーブル ===== -->
+  <section>
+    <h2>📋 記録ログ</h2>
+    <table id="logTable"></table>
+  </section>
+
+  <!-- ===== CSV・リセット ===== -->
+  <section>
+    <h3>💾 データ管理</h3>
+    <button id="downloadCsv">CSVをダウンロード</button>
+    <input type="file" id="uploadCsv" accept=".csv">
+    <button id="resetData" style="background:#d32f2f;">履歴リセット</button>
+  </section>
+
+  <script>
+    const labelsMap = {
+      tate: "たてサッケイド",
+      yoko: "よこサッケイド",
+      herman: "ヘルマンシート",
+      block1: "広視野①",
+      block2: "広視野②",
+      kanji: "漢数字一行",
+      yokounit: "よこ一行ユニット",
+      numcheck: "数字ランダムチェック",
+      logical: "ロジカルテスト",
+      imgmemory: "イメージ記憶",
+      imgread: "イメージ読み",
+    };
+
+    let allData = [];
+    let currentRange = "daily";
+    let chartInstance = null;
+
+    // ===== 初期化 =====
+    document.addEventListener("DOMContentLoaded", () => {
+      createItemSelect();
+      loadLocal();
+      renderChart();
+      renderTable();
+    });
+
+    // 🌙 ダークモード切替
+    document.getElementById("toggleTheme").addEventListener("click", () => {
+      document.body.classList.toggle("dark");
+    });
+
+    // 📝 記録フォーム
+    document.getElementById("recordForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const record = { date: new Date().toISOString().split("T")[0] };
+      for (const [key, value] of formData.entries()) {
+        record[key] = Number(value) || 0;
+      }
+      allData.push(record);
+      saveLocal();
+      renderChart();
+      renderTable();
+      e.target.reset();
+    });
+
+    // 🗂 CSVダウンロード
+    document.getElementById("downloadCsv").addEventListener("click", () => {
+      const csv = convertToCsv(allData);
+      const blob = new Blob([csv], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "btr_data.csv";
+      a.click();
+    });
+
+    // 📥 CSVアップロード
+    document.getElementById("uploadCsv").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        allData = parseCsv(evt.target.result);
+        saveLocal();
+        renderChart();
+        renderTable();
+      };
+      reader.readAsText(file);
+    });
+
+    // 🧼 リセット
+    document.getElementById("resetData").addEventListener("click", () => {
+      if (!confirm("すべての記録を削除しますか？")) return;
+      allData = [];
+      localStorage.removeItem("btrData");
+      renderChart();
+      renderTable();
+    });
+
+    // 📅 期間切替
+    document.querySelectorAll(".filter-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        currentRange = btn.dataset.range;
+        renderChart();
+      });
+    });
+
+    // 📈 プルダウン作成
+    function createItemSelect() {
+      const sel = document.getElementById("itemSelect");
+      Object.entries(labelsMap).forEach(([key, label]) => {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = label;
+        sel.appendChild(option);
+      });
+      sel.addEventListener("change", renderChart);
+    }
+
+    // 🧮 集計処理
+    function aggregateData(range) {
+      const grouped = {};
+      allData.forEach(row => {
+        const date = new Date(row.date);
+        let key;
+        if (range === "daily") key = row.date;
+        else if (range === "weekly") {
+          const start = new Date(date.setDate(date.getDate() - date.getDay()));
+          key = start.toISOString().split("T")[0];
+        } else {
+          key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`;
+        }
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(row);
+      });
+
+      const result = [];
+      for (const [key, rows] of Object.entries(grouped)) {
+        const agg = { date: key };
+        for (const col of Object.keys(labelsMap)) {
+          agg[col] = rows.reduce((s, r) => s + Number(r[col] || 0), 0) / rows.length;
+        }
+        result.push(agg);
+      }
+      result.sort((a,b)=> new Date(a.date)-new Date(b.date));
+      return result;
+    }
+
+    // 📊 グラフ描画
+    function renderChart() {
+      const key = document.getElementById("itemSelect").value || "tate";
+      const data = aggregateData(currentRange);
+      const ctx = document.getElementById("mainChart").getContext("2d");
+
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: currentRange === "daily" ? "bar" : "bar",
+        data: {
+          labels: data.map(d => d.date),
+          datasets: [
+            {
+              label: labelsMap[key],
+              data: data.map(d => d[key]),
+              borderColor: "#1976d2",
+              backgroundColor: "rgba(25,118,210,0.5)",
+              fill: true,
+              tension: 0.3
+            },
+            {
+              label: labelsMap[key] + "（折れ線）",
+              data: data.map(d => d[key]),
+              borderColor: "#d32f2f",
+              type: "line",
+              fill: false,
+              tension: 0.3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } },
+          plugins: { legend: { display: true } }
+        }
+      });
+    }
+
+    // 📝 ログテーブル
+    function renderTable() {
+      const table = document.getElementById("logTable");
+      const headers = ["日付", ...Object.values(labelsMap)];
+      let html = "<tr>" + headers.map(h => `<th>${h}</th>`).join("") + "</tr>";
+      allData.forEach(row => {
+        html += "<tr><td>" + row.date + "</td>";
+        for (const col of Object.keys(labelsMap)) {
+          html += `<td>${row[col] ?? 0}</td>`;
+        }
+        html += "</tr>";
+      });
+      table.innerHTML = html;
+    }
+
+    // CSV関連
+    function convertToCsv(data) {
+      const headers = ["date", ...Object.keys(labelsMap)];
+      const rows = data.map(d => headers.map(h => d[h] ?? "").join(","));
+      return [headers.join(","), ...rows].join("\n");
+    }
+    function parseCsv(text) {
+      const lines = text.trim().split("\n");
+      const headers = lines[0].split(",");
+      return lines.slice(1).map(line => {
+        const cols = line.split(",");
+        const obj = {};
+        headers.forEach((h, i) => obj[h] = h === "date" ? cols[i] : Number(cols[i]));
+        return obj;
+      });
+    }
+
+    // LocalStorage
+    function saveLocal() {
+      localStorage.setItem("btrData", convertToCsv(allData));
+    }
+    function loadLocal() {
+      const csv = localStorage.getItem("btrData");
+      if (csv) allData = parseCsv(csv);
+    }
+  </script>
+</body>
+</html>

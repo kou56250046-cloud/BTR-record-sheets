@@ -124,6 +124,8 @@
         <label>ロジカルテスト<input type="number" name="logical"></label>
         <label>イメージ記憶<input type="number" name="imgmemory"></label>
         <label>イメージ読み<input type="number" name="imgread"></label>
+        <label>スピードチェック<input type="number" name="speedcheck"></label>
+        <label>スピードボード<input type="number" name="speedboard"></label>
       </div>
       <button type="submit">記録する</button>
     </form>
@@ -158,6 +160,7 @@
   </section>
 
   <script>
+    // ==== ラベル設定 ====
     const labelsMap = {
       tate: "たてサッケイド",
       yoko: "よこサッケイド",
@@ -170,6 +173,8 @@
       logical: "ロジカルテスト",
       imgmemory: "イメージ記憶",
       imgread: "イメージ読み",
+      speedcheck: "スピードチェック",
+      speedboard: "スピードボード"
     };
 
     let allData = [];
@@ -189,13 +194,15 @@
       document.body.classList.toggle("dark");
     });
 
-    // 📝 記録フォーム
+    // 📝 記録フォーム送信
     document.getElementById("recordForm").addEventListener("submit", (e) => {
       e.preventDefault();
       const formData = new FormData(e.target);
       const record = { date: new Date().toISOString().split("T")[0] };
       for (const [key, value] of formData.entries()) {
-        record[key] = Number(value) || 0;
+        if (value !== "") { // ✅ 空欄は登録しない
+          record[key] = Number(value);
+        }
       }
       allData.push(record);
       saveLocal();
@@ -204,7 +211,7 @@
       e.target.reset();
     });
 
-    // 🗂 CSVダウンロード
+    // ===== CSVダウンロード =====
     document.getElementById("downloadCsv").addEventListener("click", () => {
       const csv = convertToCsv(allData);
       const blob = new Blob([csv], { type: "text/csv" });
@@ -214,7 +221,7 @@
       a.click();
     });
 
-    // 📥 CSVアップロード
+    // ===== CSVアップロード =====
     document.getElementById("uploadCsv").addEventListener("change", (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -228,7 +235,7 @@
       reader.readAsText(file);
     });
 
-    // 🧼 リセット
+    // ===== 履歴リセット =====
     document.getElementById("resetData").addEventListener("click", () => {
       if (!confirm("すべての記録を削除しますか？")) return;
       allData = [];
@@ -237,7 +244,7 @@
       renderTable();
     });
 
-    // 📅 期間切替
+    // ===== 表示期間切替 =====
     document.querySelectorAll(".filter-btn").forEach(btn => {
       btn.addEventListener("click", () => {
         currentRange = btn.dataset.range;
@@ -245,7 +252,7 @@
       });
     });
 
-    // 📈 プルダウン作成
+    // ===== プルダウン生成 =====
     function createItemSelect() {
       const sel = document.getElementById("itemSelect");
       Object.entries(labelsMap).forEach(([key, label]) => {
@@ -257,7 +264,7 @@
       sel.addEventListener("change", renderChart);
     }
 
-    // 🧮 集計処理
+    // ===== 集計 =====
     function aggregateData(range) {
       const grouped = {};
       allData.forEach(row => {
@@ -278,7 +285,8 @@
       for (const [key, rows] of Object.entries(grouped)) {
         const agg = { date: key };
         for (const col of Object.keys(labelsMap)) {
-          agg[col] = rows.reduce((s, r) => s + Number(r[col] || 0), 0) / rows.length;
+          const valid = rows.map(r => r[col]).filter(v => typeof v === "number" && !isNaN(v));
+          agg[col] = valid.length ? valid.reduce((s, v) => s + v, 0) / valid.length : 0;
         }
         result.push(agg);
       }
@@ -286,7 +294,7 @@
       return result;
     }
 
-    // 📊 グラフ描画
+    // ===== グラフ描画 =====
     function renderChart() {
       const key = document.getElementById("itemSelect").value || "tate";
       const data = aggregateData(currentRange);
@@ -295,7 +303,7 @@
       if (chartInstance) chartInstance.destroy();
 
       chartInstance = new Chart(ctx, {
-        type: currentRange === "daily" ? "bar" : "bar",
+        type: "bar",
         data: {
           labels: data.map(d => d.date),
           datasets: [
@@ -303,17 +311,14 @@
               label: labelsMap[key],
               data: data.map(d => d[key]),
               borderColor: "#1976d2",
-              backgroundColor: "rgba(25,118,210,0.5)",
-              fill: true,
-              tension: 0.3
+              backgroundColor: "rgba(25,118,210,0.5)"
             },
             {
               label: labelsMap[key] + "（折れ線）",
               data: data.map(d => d[key]),
               borderColor: "#d32f2f",
               type: "line",
-              fill: false,
-              tension: 0.3
+              fill: false
             }
           ]
         },
@@ -325,7 +330,7 @@
       });
     }
 
-    // 📝 ログテーブル
+    // ===== テーブル描画 =====
     function renderTable() {
       const table = document.getElementById("logTable");
       const headers = ["日付", ...Object.values(labelsMap)];
@@ -333,19 +338,20 @@
       allData.forEach(row => {
         html += "<tr><td>" + row.date + "</td>";
         for (const col of Object.keys(labelsMap)) {
-          html += `<td>${row[col] ?? 0}</td>`;
+          html += `<td>${row[col] ?? ""}</td>`;
         }
         html += "</tr>";
       });
       table.innerHTML = html;
     }
 
-    // CSV関連
+    // ===== CSV関連 =====
     function convertToCsv(data) {
       const headers = ["date", ...Object.keys(labelsMap)];
       const rows = data.map(d => headers.map(h => d[h] ?? "").join(","));
       return [headers.join(","), ...rows].join("\n");
     }
+
     function parseCsv(text) {
       const lines = text.trim().split("\n");
       const headers = lines[0].split(",");
@@ -357,7 +363,7 @@
       });
     }
 
-    // LocalStorage
+    // ===== LocalStorage =====
     function saveLocal() {
       localStorage.setItem("btrData", convertToCsv(allData));
     }
